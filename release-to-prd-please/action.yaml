@@ -1,0 +1,48 @@
+name: Release to PRD please
+description: |
+  Thin wrapper around release-please adding concurrency protection.
+
+inputs:
+  release-token:
+    description: 'Release token'
+    required: true
+
+outputs:
+  tag_name:
+    description: Release tag name
+    value: ${{ steps.release.outputs.tag_name || steps.get-tag-at-head.outputs.tag_name }}
+  version:
+    description: Release version
+    value: ${{ steps.release.outputs.version || steps.get-tag-at-head.outputs.version }}
+  major:
+    description: Major version
+    value: ${{ steps.release.outputs.major || steps.get-tag-at-head.outputs.major }}
+  minor:
+    description: Minor version
+    value: ${{ steps.release.outputs.minor || steps.get-tag-at-head.outputs.minor }}
+  patch:
+    description: Patch version
+    value: ${{ steps.release.outputs.patch || steps.get-tag-at-head.outputs.patch }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - id: release
+      uses: googleapis/release-please-action@v4
+      with:
+        # Allows the triggering of workflows based on automated actions.
+        token: ${{ inputs.release-token }}
+        skip-github-pull-request: true
+
+    - shell: bash
+      env:
+        OUTPUT: ${{ toJSON(steps.release.outputs) }}
+      run: |
+        echo 'Release-please output debug'
+
+    - id: get-tag-at-head
+      if: ${{ steps.release.outputs.tag_name == '' }}
+      shell: bash
+      run: ${{ github.action_path }}/src/get-tag-at-head.sh

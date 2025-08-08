@@ -1,0 +1,75 @@
+name: Extract file from docker image
+description: Extract file from docker image
+
+inputs:
+  app_name:
+    description: Name of the app being built.
+    required: true
+  destination:
+    description: Path to extract file to
+    required: true
+  image_tag:
+    description: The tag of the docker image to extract the file from.
+    required: true
+  path:
+    description: Path to file to extract
+    required: true
+  platform:
+    description: Product name (e.g. modustack)
+    required: true
+  aws-iam-oidc-role:
+    description: The AWS IAM OIDC assumable role to assume
+    required: true
+  aws-region:
+    description: The AWS region to use
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      if: ${{ !env.ACT }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-iam-oidc-role }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Login to Amazon ECR
+      if: ${{ !env.ACT }}
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        mask-password: 'true'
+
+    - name: Extract file from docker image
+      if: ${{ !env.ACT }}
+      uses: shrink/actions-docker-extract@v3
+      id: extract
+      with:
+        image: ${{ steps.login-ecr.outputs.registry }}/${{ inputs.platform }}/${{ inputs.app_name }}:${{ inputs.image_tag }}
+        path: ${{ inputs.path }}
+        destination: ${{ inputs.destination }}
+
+    - name: Set up local Docker Buildx
+      if: ${{ env.ACT }}
+      uses: docker/setup-buildx-action@v2
+      with:
+        driver: docker
+
+    - shell: bash
+      run: |
+        echo "platform=${{ inputs.platform }}"
+        echo "app_name=${{ inputs.app_name }}"
+        echo "image_tag=${{ inputs.image_tag }}"
+
+    - name: Extract file from docker image (local)
+      if:  ${{ env.ACT }}
+      uses: shrink/actions-docker-extract@v3
+      id: local-extract
+      with:
+        image: ${{ inputs.platform }}/${{ inputs.app_name }}:${{ inputs.image_tag }}
+        path: ${{ inputs.path }}
+        destination: ${{ inputs.destination }}

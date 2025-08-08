@@ -1,0 +1,29 @@
+name: Docker build
+
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Docker build
+        id: docker-local-build
+        uses: ./docker-build
+        with:
+          app_name: stub-img
+          context: ./
+          platform: devops
+          file: ./Dockerfile
+
+      - name: Debug output
+        env:
+          OUTPUT: ${{ toJson(steps.docker-local-build.outputs) }}
+        run: |
+          echo "${OUTPUT}"

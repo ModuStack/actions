@@ -1,0 +1,41 @@
+name: Last Change Ref Name
+description: Latest tag or first commit (if tag doesn't exist) before current tag
+
+inputs:
+  current-tag:
+    description: Get last tag before this one/or first commit.
+    required: true
+
+outputs:
+  last-change-ref-name:
+    description: Latest tag or commit (if tag doesn't exist) before current tag
+    value: ${{ steps.last-tag.outputs.last_tag || steps.first-commit.outputs.first_commit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Last tag before current tag
+      id: last-tag
+      shell: bash
+      continue-on-error: true
+      env:
+        CURRENT_TAG: ${{ inputs.current-tag }}
+      run: |
+        if git rev-parse ${CURRENT_TAG} >/dev/null 2>&1
+        then
+          last_tag="$(git describe --abbrev=0 --tags ${CURRENT_TAG}^)"
+        else
+          last_tag=""
+        fi
+        echo "${last_tag}"
+        echo "last_tag=${last_tag}" >> "${GITHUB_OUTPUT}"
+
+    # If there is no tag on the repository, this will be the first one
+    # so every change should be considered.
+    - name: First commit
+      id: first-commit
+      shell: bash
+      run: |
+        first_commit=$(git rev-list --max-parents=0 HEAD | tail -n 1)
+        echo "${first_commit}"
+        echo "first_commit=${first_commit}" >> "${GITHUB_OUTPUT}"

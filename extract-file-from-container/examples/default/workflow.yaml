@@ -1,0 +1,67 @@
+name: Extract file from container
+
+on:
+  push:
+
+jobs:
+  extract-file:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Docker build
+        id: docker-local-build
+        uses: ./docker-build
+        with:
+          app_name: stub-img
+          context: ./
+          platform: devops
+          file: ./Dockerfile
+
+      - name: Extract file from container
+        id: extract-file
+        uses: ./extract-file-from-container
+        with:
+          path: /usr/share/nginx/html/index.html
+          destination: ./output
+          platform: devops
+          app_name: stub-img
+          image_tag: ${{ steps.docker-local-build.outputs.version }}
+
+
+      - name: Asserts file index.html exists in output folder
+        env:
+          DESTINATION: ${{ steps.extract-file.outputs.destination }}
+        shell: python {0}
+        run: |
+          import os
+          print(f"Listing files in {os.environ['DESTINATION']}")
+          print('\n'.join(os.listdir(os.environ['DESTINATION'])))
+          assert os.path.isfile(f"{os.environ['DESTINATION']}/index.html")
+
+      - name: Extract folder from container
+        id: extract-file
+        uses: ./extract-file-from-container
+        with:
+          path: /usr/share/nginx/html/
+          destination: ./output
+          platform: devops
+          app_name: stub-img
+          image_tag: ${{ steps.docker-local-build.outputs.version }}
+
+      - name: Asserts file index.html exists in output folder
+        env:
+          DESTINATION: ${{ steps.extract-file.outputs.destination }}
+        shell: python {0}
+        run: |
+          import os
+          testdir = f"{os.environ['DESTINATION']}/html"
+
+          print(f"Listing files in {testdir}")
+          print('\n'.join(os.listdir(testdir)))
+
+          assert os.path.isdir(testdir)

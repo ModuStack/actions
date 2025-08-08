@@ -1,0 +1,89 @@
+name: Retag ECR image
+description: Retags a given ECR image with the current workflow run github.ref_name (tag name)
+
+inputs:
+  platform:
+    description: the platform/product.
+    required: true
+  service:
+    description: the app or service name.
+    required: true
+  from-tag:
+    description: Source tag
+    default: ''
+  to-tag:
+    description: Target tag
+    default: ''
+  to-tag-as-short-sha:
+    description: Indicates if to-tag should be shortened to the first 8 characters of the SHA
+    default: ''
+  aws-iam-oidc-role:
+    description: The AWS IAM OIDC assumable role to assume
+    required: true
+  aws-region:
+    description: The AWS region to use
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      if: ${{ !env.ACT }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-iam-oidc-role }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Resolves Git From SHA
+      if: ${{ !inputs.from-tag }}
+      id: resolved-from-sha
+      shell: bash
+      run: |
+        echo "value=sha-${GITHUB_SHA::8}" >> "${GITHUB_OUTPUT}"
+
+    - name: Resolves Git To SHA
+      if: ${{ inputs.to-tag-as-short-sha }}
+      id: resolved-to-sha
+      shell: bash
+      env:
+        TO_TAG: ${{ inputs.to-tag }}
+      run: |
+        echo "value=sha-${TO_TAG::8}" >> "${GITHUB_OUTPUT}"
+
+    - name: Login to Amazon ECR
+      if: ${{ !env.ACT }}
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        mask-password: 'true'
+
+    - name: >
+        Retag ${{ inputs.service }}:${{ inputs.from-tag || steps.resolved-from-sha.outputs.value }} to
+        ${{ inputs.service }}:${{ inputs.to-tag || github.ref_name }}
+      if: ${{ !env.ACT }}
+      shell: bash
+      env:
+        FROM_TAG: ${{ inputs.from-tag || steps.resolved-from-sha.outputs.value }}
+        TO_TAG: ${{ inputs.to-tag-as-short-sha && steps.resolved-to-sha.outputs.value || inputs.to-tag || github.ref_name }}
+        ECR_REPO_NAME: ${{ inputs.platform }}/${{ inputs.service }}
+        IMAGE_FQN: ${{ steps.login-ecr.outputs.registry }}/${{ inputs.platform }}/${{ inputs.service }}
+        AWS_DEFAULT_REGION: ${{ inputs.aws-region }}
+      run: 
+        manifest=$(aws ecr batch-get-image --repository-name ${ECR_REPO_NAME} --image-ids imageTag=$FROM_TAG --output json | jq --raw-output '.images[0].imageManifest')
+        echo $manifest
+
+        if [[ "${manifest}" == 'null' ]]; then
+          echo "Source image ${ECR_REPO_NAME}:${FROM_TAG} not found!"
+          exit 1
+        fi
+
+        aws ecr put-image --repository-name ${ECR_REPO_NAME} --image-tag ${TO_TAG} --image-manifest "$manifest" || true
+
+    - name: Retag locally
+      if: ${{ env.ACT }}
+      shell: bash
+      env:
+        FROM_TAG: ${{ inputs.from-tag || steps.resolved-from-sha.outputs.value }}
+        TO_TAG: ${{ inputs.to-tag-as-short-sha && steps.resolved-to-sha.outputs.value || inputs.to-tag || github.ref_name }}
+      run:
+        docker tag "${{ inputs.platform }}/${{ inputs.service }}:${FROM_TAG}" "${{ inputs.platform }}/${{ inputs.service }}:${TO_TAG}"

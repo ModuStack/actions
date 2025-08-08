@@ -1,0 +1,4 @@
+-e githubevents/opened_pull_request.json
+-s GITHUB_TOKEN=<your token>
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+-W .github/workflows/devops-stub-svc.yaml

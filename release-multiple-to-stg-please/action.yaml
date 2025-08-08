@@ -1,0 +1,83 @@
+name: Release to STG please
+description: |
+  Thin wrapper around release-please adding concurrency protection.
+
+inputs:
+  release-token:
+    description: 'Release token'
+    required: true
+  github-token:
+    description: 'GitHub token'
+    required: true
+  head-branches:
+    description: 'List of head branches'
+    required: false
+    default: '{"main": "release-please--branches--main"}'
+  repo:
+    description: 'Repository'
+    required: true
+  release-pr-label:
+    description: 'Release PR label'
+    required: false
+    default: 'autorelease: pending'
+
+outputs:
+  pr:
+    description: Release PR number for main branch
+    value: ${{ steps.get-pr.outputs.pr }}
+  pre_release_tag:
+    description: Pre-release tag for main branch
+    value: ${{ steps.get-pr.outputs.pre_release_tag }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - id: release
+      uses: googleapis/release-please-action@v4
+      with:
+        # Allows the triggering of workflows based on automated actions.
+        token: ${{ inputs.release-token }}
+        skip-github-release: true # we don't want to create a release from stg workflows
+
+    - shell: bash
+      env:
+        OUTPUT: ${{ toJSON(steps.release.outputs) }}
+      run: |
+        echo 'Release-please output debug'
+
+
+    - name: Config Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f ${{ github.action_path }}/requirements.txt ]; then
+          pip install -r ${{ github.action_path }}/requirements.txt;
+        fi
+
+
+    - id: get-multiple-releases-pr
+      shell: bash
+      run: |
+        ${{ github.action_path }}/src/get_releases_pr.py  --repo '${{ inputs.repo }}' \
+          --release-pr-label '${{ inputs.release-pr-label }}' \
+          --release '${{ toJSON(steps.release.outputs) }}' \
+          --branches '${{ inputs.head-branches }}'
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+
+    - id: get-pr
+      shell: bash
+      run: |
+        pr_release_map=${{ steps.get-multiple-releases-pr.outputs.pr_map }}
+        pr=$(echo "${pr_release_map}" | jq --compact-output '.pr')
+        echo "pr=${pr}" | tee -a "${GITHUB_OUTPUT}"
+        pre_release_tag=$(echo "${pr_release_map}" | jq --compact-output '.pre_release_tag')
+        echo "pre_release_tag=${pre_release_tag}" | tee -a "${GITHUB_OUTPUT}"

@@ -1,0 +1,67 @@
+name: Has release image in ECR image
+description: Check if a release image exists in ECR
+
+inputs:
+  release-candidate-tag:
+    description: The release candidate tag
+    required: true
+  platform:
+    description: Platform name prefix for ECR repositories
+    required: true
+  services:
+    description: List of services names as a JSON string
+    required: true
+  aws-iam-oidc-role:
+    description: The AWS IAM OIDC assumable role to assume
+    required: true
+  aws-region:
+    description: The AWS region to use
+    required: true
+outputs:
+  services:
+    description: List of services and their status
+    value: ${{ steps.check.outputs.services }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      if: ${{ !env.ACT }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-iam-oidc-role }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Login to Amazon ECR
+      if: ${{ !env.ACT }}
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        mask-password: 'true'
+
+    - name: Check images in ECR
+      id: check
+      shell: bash
+      run: |
+        PLATFORM="${{ inputs.platform }}"
+        TAG="${{ inputs.release-candidate-tag }}"
+        SERVICES_JSON='${{ inputs.services }}'
+
+        RESULT=()
+        SERVICES=$(echo "$SERVICES_JSON" | jq -r '.[]')
+
+        for SERVICE in $SERVICES; do
+          REPO="$PLATFORM/$SERVICE"
+          IMAGE_EXISTS=$(aws ecr describe-images --repository-name "$REPO" --image-ids imageTag="$TAG" 2>/dev/null || echo "not found")
+          if [[ "$IMAGE_EXISTS" == "not found" ]]; then
+            RESULT+=("{ \"name\": \"$SERVICE\", \"changed\": false }")
+          else
+            RESULT+=("{ \"name\": \"$SERVICE\", \"changed\": true }")
+          fi
+        done
+        JSON_RESULT="["$(IFS=,; echo "${RESULT[*]}")"]"
+        echo "services=$JSON_RESULT"
+        echo "services=$JSON_RESULT" >> ${GITHUB_OUTPUT}
+
+
+

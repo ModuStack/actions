@@ -1,0 +1,13 @@
+services:
+  app:
+    image: python:3.12-alpine3.19
+    command:
+      - /bin/sh 
+      - -c 
+      - |
+        pip install -r requirements.txt
+        pip install pytest
+        tail -f /dev/null
+    volumes:
+      - ./:/srv
+    working_dir: /srv

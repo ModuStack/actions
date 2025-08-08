@@ -1,0 +1,68 @@
+name: docker-deploy
+description: Deploy a given docker file to the server
+
+inputs:
+  host:
+    description: "Host where docker will be deployed"
+    required: true
+  source-path:
+    description: "Docker file location"
+    required: true
+  destination-path:
+    description: "Path where docker will be located"
+    required: true
+  rsync-exclude:
+    description: "Exclude these files"
+    required: true
+  ssh-key:
+    description: "Ssh Private Key"
+    required: true
+  skip-docker-installation:
+    description: "Whether to install docker in the target machine"
+    required: false
+    default: 'false'
+  docker-compose-as-plugin:
+    description: "Whether to use docker-compose as a plugin"
+    required: false
+    default: 'false'
+
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v4
+    - name: Install dependencies
+      shell: bash
+      run: |
+        sudo apt update
+        sudo apt install -y rsync
+    - name: Deploy docker
+      shell: bash
+      run: |
+        ### Setup SSH
+        eval $(ssh-agent -s)
+        echo "${{ inputs.ssh-key }}" | tr -d '\r' | ssh-add - > /dev/null
+        mkdir -p ~/.ssh && chmod 700 ~/.ssh
+        echo -e "Host *\n\tStrictHostKeyChecking no" > ~/.ssh/config
+
+        if [ "${{ inputs.skip-docker-installation }}" != "true" ]; then
+          ### Install Docker
+          ssh ${{ inputs.host }} "sudo apt update && sudo apt install -y docker.io docker-compose && sudo usermod -a -G docker ubuntu && sudo service docker start"
+        fi
+
+        ### Deploy Docker
+        cd ${{ inputs.source-path }}
+        ssh ${{ inputs.host }} sudo mkdir -p ${{ inputs.destination-path }}/
+        rsync --rsync-path="sudo rsync" --exclude=${{ inputs.rsync-exclude}} --ignore-times --delete-after --compress --recursive --info=progress2 . ${{ inputs.host }}:${{ inputs.destination-path }}/
+
+
+        if [ "${{ inputs.docker-compose-as-plugin }}" != "true" ]; then
+          ### Start APP
+          ssh ${{ inputs.host }} "sudo sh -c \"cd ${{ inputs.destination-path }} && docker-compose --profile docker pull\""
+          ssh ${{ inputs.host }} "sudo sh -c \"cd ${{ inputs.destination-path }} && docker-compose --profile docker down --remove-orphans && ENV=prd docker-compose --profile docker up -d --remove-orphans\""
+        else
+          ssh ${{ inputs.host }} "sudo sh -c \"cd ${{ inputs.destination-path }} && docker compose --profile docker pull\""
+          ssh ${{ inputs.host }} "sudo sh -c \"cd ${{ inputs.destination-path }} && docker compose --profile docker down --remove-orphans && ENV=prd docker compose --profile docker up -d --remove-orphans\""
+        fi
+
+        ssh ${{ inputs.host }} "sudo docker ps -a"

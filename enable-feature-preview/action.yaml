@@ -1,0 +1,28 @@
+name: Enable feature preview
+description: Adds tag to PR so as to get used by ArgoCD.
+
+inputs:
+  preview_label:
+    description: label to be added to the PR.
+    required: true
+  issue_number:
+    description: For identifying which PR to update.
+    required: true
+  gh_token:
+    description: GitHub token.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Add preview label to PR
+      shell: bash
+      env:
+        PREVIEW_LABEL: ${{ inputs.preview_label }}
+        ISSUE_NUMBER: ${{ inputs.issue_number }} # PRs are numbered as issues on GitHub
+        GH_TOKEN: ${{ inputs.gh_token }}
+      run: |
+        gh issue edit $ISSUE_NUMBER --add-label $PREVIEW_LABEL

@@ -1,0 +1,3 @@
+python-dotenv
+Jinja2
+PyYAML

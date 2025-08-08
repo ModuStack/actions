@@ -1,0 +1,40 @@
+name: Structurizr
+description: |
+  Uses the structurizr cli to push documentation to a given structurizr workspace.
+  Assumes the structurizr cli is installed and configured.
+
+  The inputs are the same ones you get from the structurizr workspace settings page.
+
+inputs:
+  url:
+    description: the url of the structurizr workspace.
+    required: true
+  id:
+    description: the id of the structurizr workspace.
+    required: true
+  key:
+    description: the api key for the structurizr workspace.
+    required: true
+  secret:
+    description: the api secret for the structurizr workspace.
+    required: true
+  path:
+    description: the path to the structurizr workspace.dsl file.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # If the behavior is replaced in the future,
+    # use an action similar to https://github.com/marketplace/actions/docker-run-action
+    # instead.
+    - name: Push documentation to structurizr
+      uses: docker://structurizr/cli:latest
+      with:
+        args: |
+          push \
+            -url ${{ inputs.url }} \
+            -id ${{ inputs.id }} \
+            -key ${{ inputs.key }} \
+            -secret ${{ inputs.secret }} \
+            -workspace ${{ inputs.path }}

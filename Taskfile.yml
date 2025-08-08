@@ -1,0 +1,165 @@
+version: '3'
+
+tasks:
+  init:
+    dir: '{{.ROOT_DIR}}'
+    cmds:
+      - pre-commit install --hook-type commit-msg
+      - pre-commit install
+      - git submodule update --init --recursive
+
+  test:sh:
+    dir: '{{.ROOT_DIR}}'
+    env:
+      CLI_ARGS: '{{.CLI_ARGS}}'
+    cmd: |
+      if [ -z "${CLI_ARGS}" ]; then
+        for test_dir in */test; do
+          echo "Running tests for ${test_dir}"
+          echo '---'
+          test/bats/bin/bats "${test_dir}"
+        done
+
+        exit 0
+      fi
+
+      test/bats/bin/bats "${CLI_ARGS}/test"
+
+  test:act:
+    cmds:
+      - for:
+          # actions
+          - test:act:docker-build
+          - test:act:changed-files
+          - test:act:extract-file-from-container
+          - test:act:deploy
+          # sample workflows
+          - test:act:feature-preview
+          - test:act:staging
+          - test:act:production
+        task: "{{ .ITEM }}"
+
+  test:act:cleanup:
+    cmds:
+      - cmd: docker image rm devops/stub-img
+        ignore_error: true
+
+  test:act:docker-build:
+    cmds:
+      - |
+        act --workflows docker-build/examples/default/workflow.yaml \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+      - defer: { task: test:act:cleanup }
+
+  test:act:feature-preview:
+    cmds:
+      - |
+        act --workflows .github/workflows/feature-preview.yaml \
+          --eventpath test/stubs/github-events/opened_pull_request.json \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+
+  test:act:staging:
+    cmds:
+      - |
+        act push --workflows .github/workflows/staging.yaml \
+          --defaultbranch "$(git rev-parse --abbrev-ref HEAD)" \
+          --eventpath test/stubs/github-events/push_to_main.json \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+      - defer: { task: test:act:cleanup }
+
+  test:act:production:
+    cmds:
+      - |
+        act push --workflows .github/workflows/production.yaml \
+          --defaultbranch "$(git rev-parse --abbrev-ref HEAD)" \
+          --eventpath test/stubs/github-events/push_to_main.json \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+      - defer: { task: test:act:cleanup }
+
+
+  test:act:tests:
+    cmds:
+      - for:
+          - test:act:test-sh
+          - test:act:test-python
+        task: "{{ .ITEM }}"
+
+
+  test:act:test-sh:
+    cmds:
+      - |
+        act pull_request -j test-sh \
+          --workflows .github/workflows/test-sh.yaml \
+          --container-architecture linux/arm64 \
+          --secret  GITHUB_TOKEN="$(gh auth token)"
+
+  test:act:test-python:
+    cmds:
+      - |
+        act pull_request -j test-python \
+          --workflows .github/workflows/test-python.yaml \
+          --container-architecture linux/arm64 \
+          --secret  GITHUB_TOKEN="$(gh auth token)"
+
+
+  test:act:changed-files:
+    cmds:
+      - |
+        act --workflows changed-files/examples/force-app-as-changed/workflow.yaml \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+      - defer: { task: test:act:cleanup }
+
+  test:act:extract-file-from-container:
+    cmds:
+      - |
+        act --workflows extract-file-from-container/examples/default/workflow.yaml \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+      - defer: { task: test:act:cleanup }
+
+  test:act:deploy:
+    cmds:
+      - |
+        act --workflows deploy/examples/default/workflow.yaml \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+      - defer: { task: test:act:cleanup }
+
+
+  test:act:jinja2:
+    cmds:
+      - |
+        act --workflows jinja2/examples/default/workflow.yaml \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+      - defer: { task: test:act:cleanup }
+
+  test:act:get-release-pr:
+    cmds:
+      - |
+        act --workflows get-release-pr/examples/default/workflow.yaml \
+          --container-architecture linux/arm64 \
+          --secret GITHUB_TOKEN="$(gh auth token)"
+      - defer: { task: test:act:cleanup }
+
+
+  test:python:release-multiple-to-stg-please-local:
+    dir: '{{.ROOT_DIR}}'
+    cmds:
+      - |
+        virtualenv release-multiple-to-stg-please/.venv
+        source release-multiple-to-stg-please/.venv/bin/activate
+        pip install -r release-multiple-to-stg-please/requirements.txt
+        PYTHONPATH=release-multiple-to-stg-please/src python -m unittest discover -s release-multiple-to-stg-please/tests
+
+
+  test:python:release-multiple-to-stg-please:
+    dir: '{{.ROOT_DIR}}'
+    cmds:
+      - |
+        PYTHONPATH=release-multiple-to-stg-please/src python -m unittest discover -s release-multiple-to-stg-please/tests

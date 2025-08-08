@@ -1,0 +1,40 @@
+name: Get release PR
+
+on:
+  push:
+
+jobs:
+  get-release-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Replace gh command by stub
+        run: |
+          json='[{"baseBranchName":"main","files":[],"headBranchName":"release-please--branches--main","labels":["autorelease: pending"],"number":118,"title":"chore(main): release 1.0.0","body":"PR body"}]'
+          echo "echo '${json}'" > /usr/bin/gh
+          chmod +x /usr/bin/gh
+
+      - run: |
+          gh pr list
+
+      - name: Get release PR
+        id: get-release-pr
+        uses: ./get-release-pr
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug outputs
+        env:
+          PR: ${{ steps.get-release-pr.outputs.pr }}
+          FIELD_FROM_PR: ${{ fromJson(steps.get-release-pr.outputs.pr).headBranchName }}
+          PRE_RELEASE_TAG: ${{ steps.get-release-pr.outputs.pre_release_tag }}
+        run: |
+          echo "pr=${PR}"
+          echo "field_from_pr=${FIELD_FROM_PR}"
+          echo "pre_release_tag=${PRE_RELEASE_TAG}"

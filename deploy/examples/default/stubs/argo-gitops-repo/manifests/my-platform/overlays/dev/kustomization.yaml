@@ -1,0 +1,15 @@
+# Stub file used on Deploy action tests          
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: my-service
+  newTag: sha-test-1
+- name: my-other-service
+  newTag: sha-test-2
+- name: my-yet-another-service
+  newTag: sha-test-2
+configMapGenerator:
+- name: my-other-service
+  literals:
+  - SOME_KEY=some-value
+  - APP_RELEASE=sha-test-2

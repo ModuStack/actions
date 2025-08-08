@@ -1,0 +1,72 @@
+name: Changed files
+
+on:
+  push:
+
+jobs:
+  changed-files:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - id: str
+        name: force-app-as-changed Input as string
+        uses: ./changed-files
+        with:
+          force-app-as-changed: 'true'
+          filters: |
+            app: 
+              - **/*
+
+      - run: |
+          echo "force-app-as-changed as string: ${{ steps.str.outputs.app-from }}"
+
+      - env:
+          RESULT: ${{ steps.str.outputs.app-from }}
+        shell: python {0}
+        run: |
+          import os
+          assert os.environ['RESULT'] == 'force-app-as-changed'
+
+      - id: bool
+        name: force-app-as-changed Input as boolean comparison
+        uses: ./changed-files
+        with:
+          force-app-as-changed: ${{ 'true' == 'true' }}
+          filters: |
+            app: 
+              - **/*
+
+      - run: |
+          echo "force-app-as-changed as boolean: ${{ steps.bool.outputs.app-from }}"
+
+      - env:
+          RESULT: ${{ steps.bool.outputs.app-from }}
+        shell: python {0}
+        run: |
+          import os
+          assert os.environ['RESULT'] == 'force-app-as-changed'
+
+      - id: as-false
+        name: force-app-as-changed Input as boolean comparison
+        uses: ./changed-files
+        with:
+          force-app-as-changed: 'false'
+          filters: |
+            app: 
+              - **/*
+
+      - run: |
+          echo "force-app-as-changed as false: ${{ steps.as-false.outputs.app-from }}"
+
+      - env:
+          RESULT: ${{ steps.as-false.outputs.app-from }}
+        shell: python {0}
+        run: |
+          import os
+          assert os.environ['RESULT'] == 'filter-act'

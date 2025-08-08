@@ -1,0 +1,180 @@
+name: Docker Build
+description: Builds a given docker image
+
+inputs:
+  app_name:
+    description: Name of the app being built.
+    required: true
+  build-args:
+    description: Docker build args.
+    required: false
+  context:
+    description: Path to be used as docker build context.
+    required: false
+    default: .
+  platform:
+    description: Product name
+    required: true
+  file:
+    description: Dockerfile to be used.
+    required: false
+    default: Dockerfile
+  target:
+    description: Sets the target stage to build
+    required: false
+  cache-strategy:
+    description: Cache strategy to be used.
+    required: false
+    default: 'inline'
+  cache-mode:
+    description: |
+      Cache mode to be used. Only applies when cache-strategy is set to 'registry'.
+      Can be 'max' or 'min'. Defaults to 'max'.
+    required: false
+    default: max
+  secret-files:
+    description:  |
+      List of secret files to expose to the build (e.g., key=filename, MY_SECRET=./secret.txt)
+    required: false
+    default: ''
+  push:
+    description: Whether to push the image to the registry.
+    required: false
+    default: 'true'
+  aws-iam-oidc-role:
+    description: The AWS IAM OIDC assumable role to assume
+    required: true
+  aws-region:
+    description: The AWS region to use
+    required: true
+
+
+outputs:
+  # Here I use image name as believe it's clearer than tag, and it's also the naming
+  # used in kubernetes manifests for the image: attribute.
+  image:
+    description: Docker image with tag (for the tag with higher priority)
+    value: ${{ steps.image.outputs.image }}
+  version:
+    description: Docker app tag used
+    value: ${{ steps.meta.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      if: ${{ !env.ACT }}
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-iam-oidc-role }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Login to Amazon ECR
+      if: ${{ !env.ACT }}
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        mask-password: 'true'
+
+    - name: Set up Docker Buildx
+      if: ${{ !env.ACT }}
+      uses: docker/setup-buildx-action@v3
+
+    - name: Set up local Docker Buildx
+      if: ${{ env.ACT }}
+      uses: docker/setup-buildx-action@v3
+      with:
+        driver: docker
+
+    - name: Resolves Git SHA
+      id: resolved-sha
+      shell: bash
+      env:
+        RESOLVED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      run: |
+        echo "value=${RESOLVED_SHA::8}" >> "${GITHUB_OUTPUT}"
+
+    - name: Docker meta
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        context: ${{ env.ACT && 'git' || 'workflow' }}
+        images: ${{ !env.ACT && format('{0}{1}', steps.login-ecr.outputs.registry, '/') || '' }}${{ inputs.platform }}/${{ inputs.app_name }}
+        tags: |
+          type=ref,event=pr
+          type=raw,prefix=msha-,value=${{steps.resolved-sha.outputs.value}},enable=${{github.event_name == 'workflow_dispatch'}},priority=200
+          type=raw,prefix=sha-,value=${{steps.resolved-sha.outputs.value}},enable={{is_default_branch}},priority=300
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Docker image FQN
+      id: image
+      shell: bash
+      env:
+        IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0]}}
+      run: echo "image=${IMAGE}" >> "${GITHUB_OUTPUT}"
+
+    - name: Computes cache-from and cache-to
+      if: ${{ !env.ACT && inputs.cache-strategy == 'registry' }}
+      id: cache
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        base_ref='type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ inputs.platform }}/${{ inputs.app_name }}'
+        cache_from=''
+        cache_to="${base_ref}:cache-latest"
+
+        if [ "${EVENT_NAME}" = 'pull_request' ]; then
+          cache_from="${base_ref}:cache-pr-${{ github.event.number }}"
+          cache_to="${base_ref}:cache-pr-${{ github.event.number }}"
+        fi
+
+        echo "cache-from=${cache_from}" >> "${GITHUB_OUTPUT}"
+        echo "cache-to=${cache_to},image-manifest=true,mode=${{ inputs.cache-mode }}" >> "${GITHUB_OUTPUT}"
+
+    - name: 'Build and push (cache-strategy: registry)'
+      if: ${{ !env.ACT && inputs.cache-strategy == 'registry' }}
+      uses: docker/build-push-action@v5
+      with:
+        push: ${{ inputs.push }}
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: ${{ inputs.build-args }}
+        cache-from: |
+          ${{ steps.cache.outputs.cache-from }}
+          type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ inputs.platform }}/${{ inputs.app_name }}:cache-latest
+        cache-to: |
+          ${{ steps.cache.outputs.cache-to }}
+        target: ${{ inputs.target }}
+        secret-files: ${{ inputs.secret-files }}
+
+    - name: 'Build and push (cache-strategy: inline)'
+      if: ${{ !env.ACT && inputs.cache-strategy == 'inline' }}
+      uses: docker/build-push-action@v5
+      with:
+        push: ${{ inputs.push }}
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: ${{ inputs.build-args }}
+        cache-from: |
+          type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ inputs.platform }}/${{ inputs.app_name }}:latest
+        cache-to: type=inline
+        target: ${{ inputs.target }}
+        secret-files: ${{ inputs.secret-files }}
+
+    - name: Build (local)
+      if: ${{ env.ACT }}
+      uses: docker/build-push-action@v5
+      with:
+        push: false
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        build-args: ${{ inputs.build-args }}
+        target: ${{ inputs.target }}
+        secret-files: ${{ inputs.secret-files }}

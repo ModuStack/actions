@@ -1,0 +1,37 @@
+name: jinja2
+description: |
+  Generate outputs from a json of variables
+  and a jinja2 template string
+
+inputs:
+  vars:
+    description: JSON string of variables
+    required: true
+  template:
+    description: jinja2 template
+    required: true
+
+outputs:
+  rendered:
+    description: Rendered template
+    value: ${{ steps.generate.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: pip install -r ${{ github.action_path }}/requirements.txt
+
+    - name: Generate outputs
+      id: generate
+      shell: bash
+      env:
+        VARS: ${{ inputs.vars }}
+        TEMPLATE: ${{ inputs.template }}
+      run: |
+        rendered="$(python ${{ github.action_path }}/main.py)"
+
+        echo 'rendered<<EOF' >> "${GITHUB_OUTPUT}"
+        echo "${rendered}" >> "${GITHUB_OUTPUT}"
+        echo 'EOF' >> "${GITHUB_OUTPUT}"

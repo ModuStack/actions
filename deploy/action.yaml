@@ -1,0 +1,100 @@
+name: Deploy
+description: Modify ArgoCD manifests in order to deploy a given service
+
+inputs:
+  environment:
+    description: stg or prd
+    required: true
+  platform:
+    description: Project ArgoCD folder
+    required: true
+  changes:
+    description: |
+      app_name,changed,version,sentry_version per line of a multiline string.
+
+      where sentry_version is "service-name=v1.0.0"|"v1.0.0"|""
+    required: true
+  deploy_ssh_key:
+    description: SSH key used to pull the ArgoCD repository
+    required: true
+  deploy_commit_message:
+    description: Commit message for the deployment
+    required: true
+  sentry_version_envvar:
+    description: Environment variable name for sentry version
+    required: false
+    default: APP_RELEASE
+  argo_folder:
+    description: ArgoCD folder
+    required: false
+    default: argorepo
+  branch:
+    description: ArgoCD branch
+    required: false
+    default: main
+  gitops_server_url:
+    description: GitOps server URL
+    required: true
+  gitops_repository:
+    description: GitOps repository path
+    required: true
+  gitops_username:
+    description: GitOps username
+    required: true
+  gitops_email:
+    description: GitOps user email
+    required: true
+
+
+
+runs:
+  using: composite
+  steps:
+    - name: Install kustomize
+      working-directory: ./
+      shell: bash
+      run: curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+
+    - shell: bash
+      if: env.ACT
+      run: echo "$(pwd)" >> "${GITHUB_PATH}"
+
+    - name: Checkout repository (ACT)
+      if: env.ACT
+      uses: actions/checkout@v4
+
+    - name: Checkout repository
+      if: ${{ !env.ACT }}
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.gitops_repository }}
+        ssh-key: ${{ inputs.deploy_ssh_key }}
+        ssh-known-hosts: ${{ inputs.gitlab_known_hosts }}
+        github-server-url: ${{ inputs.gitops_server_url }}
+        path: ${{ inputs.argo_folder }}
+        ref: ${{ inputs.branch }}
+
+    # it works on kustomize 5.3.0
+    # kustomize edit set configmap was added on this release
+    # https://github.com/kubernetes-sigs/kustomize/releases/tag/kustomize%2Fv5.3.0
+    - name: Set images and sentry versions
+      env:
+        CHANGES: ${{ inputs.changes }}
+        SENTRY_VERSION_ENVVAR: ${{ inputs.sentry_version_envvar }}
+      working-directory: ./${{ inputs.argo_folder }}/manifests/${{ inputs.platform }}/overlays/${{ inputs.environment }}
+      shell: bash
+      run: ${{ github.action_path }}/src/process-changes.sh
+
+    - name: Deploy
+      uses: nick-fields/retry@v3
+      env:
+        ARGO_FOLDER: ${{ inputs.argo_folder }}
+        PLATFORM: ${{ inputs.platform }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        GITOPS_USERNAME: ${{ inputs.gitops_username }}
+        GITOPS_EMAIL: ${{ inputs.gitops_email }}
+        COMMIT_MESSAGE: ${{ inputs.deploy_commit_message }}
+      with:
+        command: bash ${{ github.action_path }}/src/commit-if-changed.sh
+        timeout_seconds: 5
+        max_attempts: 3

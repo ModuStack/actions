@@ -1,0 +1,43 @@
+name: Release to STG please
+description: |
+  Thin wrapper around release-please adding concurrency protection.
+
+inputs:
+  release-token:
+    description: 'Release token'
+    required: true
+  github-token:
+    description: 'GitHub token'
+    required: true
+
+outputs:
+  pr:
+    description: Release PR number
+    value: ${{ steps.release.outputs.pr || steps.get-release-pr.outputs.pr }}
+  pre_release_tag:
+    description: Pre-release tag
+    value: ${{ steps.get-release-pr.outputs.pre_release_tag }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v4
+
+    - id: release
+      uses: googleapis/release-please-action@v4
+      with:
+        # Allows the triggering of workflows based on automated actions.
+        token: ${{ inputs.release-token }}
+        skip-github-release: true # we don't want to create a release from stg workflows
+
+    - shell: bash
+      env:
+        OUTPUT: ${{ toJSON(steps.release.outputs) }}
+      run: |
+        echo 'Release-please output debug'
+
+    - id: get-release-pr
+      uses: modustack/actions/get-release-pr@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+

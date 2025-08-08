@@ -1,0 +1,27 @@
+name: Get Release PR
+description: Get the release PR number
+
+inputs:
+  github-token:
+    description: 'GitHub token'
+    required: true
+outputs:
+  pr:
+    description: Release PR number
+    value: ${{ steps.get-release-pr.outputs.pr }}
+  pre_release_tag:
+    description: Pre-release tag
+    value: ${{ steps.get-release-pr.outputs.pre_release_tag }}
+
+runs:
+  using: composite
+  steps:
+    - id: get-release-pr
+      shell: bash
+      run: ${{ github.action_path }}/src/get-release-pr.sh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+
+
+

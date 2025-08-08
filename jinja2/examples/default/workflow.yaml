@@ -1,0 +1,71 @@
+name: Services outputs
+
+on:
+  push:
+
+jobs:
+  services-template:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./jinja2
+        with:
+          vars: |
+            {
+              "services": [
+                {
+                  "name": "service-a",
+                  "changed": "true",
+                  "version": "1.0.0"
+                },
+
+                {
+                  "name": "service-b",
+                  "changed": "false",
+                  "version": ""
+                }
+              ]
+            }
+          template: |
+            {
+              "exclude": [
+                {
+                  "service": {
+                      "changed": "false"
+                  }
+                }
+              ],
+              "service": [
+                {% for service in services %}
+                {
+                  "name": "{{ service.name }}",
+                  "version": "{{ service.version }}"
+                }{% if not loop.last %},{% endif %}
+                {% endfor %}
+
+              ]
+            }
+
+      - uses: ./jinja2
+        with:
+          vars: |
+            {
+              "services": [
+                {
+                  "name": "service-a",
+                  "changed": "true",
+                  "version": "1.0.0"
+                },
+
+                {
+                  "name": "service-b",
+                  "changed": "false",
+                  "version": ""
+                }
+              ]
+            }
+          template: |
+            {%- for service in services %}
+            {{ service.name }},{{ service.changed }},{{ service.version }}
+            {% endfor %}

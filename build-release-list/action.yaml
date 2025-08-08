@@ -1,0 +1,51 @@
+name: Build release list
+description: |
+  Build a list of services based on whether each of them has a release candidate image in ECR.
+
+  To be used in production workflows, often checking the image tag following the format `release-pr-<pr-number>`,
+  where `<pr-number>` is the number of the release-please created PR.
+
+inputs:
+  release-candidate-tag:
+    description: The release candidate tag
+    required: true
+  platform:
+    description: Platform name prefix for ECR repositories
+    required: true
+  services:
+    description: List of services names as a JSON string
+    required: true
+  aws-iam-oidc-role:
+    description: The AWS IAM OIDC assumable role to assume
+    required: true
+  aws-region:
+    description: The AWS region to use
+    required: true
+outputs:
+  services:
+    description: List of "changed" services
+    value: ${{ steps.build-release-list.outputs.services }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-iam-oidc-role }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      with:
+        mask-password: 'true'
+
+    - name: Build release list
+      id: build-release-list
+      shell: bash
+      env:
+        PLATFORM: ${{ inputs.platform }}
+        TAG: ${{ inputs.release-candidate-tag }}
+        SERVICES_JSON: ${{ inputs.services }}
+      run: ${{ github.action_path }}/build-release-list.sh

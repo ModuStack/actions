@@ -1,0 +1,98 @@
+name: Changed files
+description: Thin wrapper around dorny/paths-filter to filter changed files
+
+inputs:
+  filters:
+    description: |
+      A list of filters to apply to the changed files. Each filter is a regular expression.
+      If a file path matches any of the filters, it will be included in the output.
+
+      The action requires that the filters are passed as
+
+      ```yaml
+      app:
+        - list
+        - of
+        - filters
+      ```
+
+      See https://github.com/dorny/paths-filter?tab=readme-ov-file#examples for examples
+    required: true
+  platform:
+    description: Platform
+    required: true
+  service:
+    description: Service
+    required: true
+  force-app-as-changed:
+    description: Whether to force the app to be considered as changed
+    required: false
+    default: 'false'
+  release-commit-message:
+    description: Default branch
+    required: false
+    default: 'chore(main): release'
+  staging-workflow-id:
+    description: Workflow ID of the staging workflow
+    required: false
+    default: 'staging.yaml'
+  github-token:
+    description: GitHub token
+    required: true
+  skip-retag:
+    description: Skip retagging the image if on a PR
+    required: false
+    default: 'false'
+
+outputs:
+  app:
+    description: Whether the app has changed
+    value: ${{ inputs.force-app-as-changed == 'true' || steps.filter.outputs.app || steps.filter-act.outputs.app }}
+
+  app-from:
+    description: Source of app changed value
+    value: ${{ inputs.force-app-as-changed == 'true' && 'force-app-as-changed' || steps.filter.outputs.app && 'filter' || steps.filter-act.outputs.app && 'filter-act' }}
+runs:
+  using: composite
+  steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha || github.sha }}
+        fetch-depth: 0
+
+    - if: github.event_name == 'push' && !contains(github.event.head_commit.message, inputs.release-commit-message)
+      id: last-successful-commit
+      continue-on-error: true
+      uses: tylermilner/last-successful-commit-hash-action@v1
+      with:
+        workflow-id: ${{ inputs.staging-workflow-id }}
+        branch: ${{ github.event.repository.default_branch  }}
+        github-token: ${{ inputs.github-token }}
+
+    - if: "${{ contains(github.event.head_commit.message, inputs.release-commit-message) }}"
+      uses: modustack/actions/last-change-ref-name@v7
+      id: tag
+      with:
+        current-tag: ${{ github.sha }}
+
+    - uses: dorny/paths-filter@v3
+      if: ${{ !env.ACT && inputs.force-app-as-changed != 'true'}}
+      id: filter
+      with:
+        base: ${{ steps.tag.outputs.last-change-ref-name || steps.last-successful-commit.outputs.commit-hash || '' }}
+        filters: ${{ inputs.filters }}
+
+    - id: filter-act
+      if: env.ACT && inputs.force-app-as-changed != 'true'
+      shell: bash
+      run: echo "app=true" >> "${GITHUB_OUTPUT}"
+
+    - if: github.event_name == 'pull_request' && inputs.skip-retag != 'true' &&  (steps.filter.outputs.app == 'false' || steps.filter-act.outputs.app == 'false') && !contains(inputs.skip, 'build')
+      uses: modustack/actions/retag-img@v7
+      with:
+        platform: ${{ inputs.platform }}
+        service: ${{ inputs.service }}
+        from-tag: latest
+        to-tag: ${{ github.event.pull_request.head.sha }}
+        to-tag-as-short-sha: true
