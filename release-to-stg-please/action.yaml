@@ -37,7 +37,7 @@ runs:
         echo 'Release-please output debug'
 
     - id: get-release-pr
-      uses: modustack/actions/get-release-pr@v7
-      with:
-        github-token: ${{ inputs.github-token }}
-
+      shell: bash
+      run: ${{ github.action_path }}/src/get-release-pr.sh
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}

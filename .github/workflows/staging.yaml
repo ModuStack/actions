@@ -31,6 +31,10 @@ jobs:
 
   release-please:
     runs-on: ubuntu-latest
+    needs:
+      - test-sh
+      - test-python
+      - test-e2e
     permissions:
       contents: write
       pull-requests: write

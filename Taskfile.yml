@@ -139,15 +139,6 @@ tasks:
           --secret GITHUB_TOKEN="$(gh auth token)"
       - defer: { task: test:act:cleanup }
 
-  test:act:get-release-pr:
-    cmds:
-      - |
-        act --workflows get-release-pr/examples/default/workflow.yaml \
-          --container-architecture linux/arm64 \
-          --secret GITHUB_TOKEN="$(gh auth token)"
-      - defer: { task: test:act:cleanup }
-
-
   test:python:release-multiple-to-stg-please-local:
     dir: '{{.ROOT_DIR}}'
     cmds:
