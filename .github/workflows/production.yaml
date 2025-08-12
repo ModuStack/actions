@@ -52,7 +52,7 @@ jobs:
       - uses: ./release-to-prd-please
         id: release
         with:
-          release-token: ${{ secrets.RA_GH_RELEASE_TOKEN }}
+          release-token: ${{ secrets.GH_RELEASE_TOKEN }}
 
       - name: tag major and minor versions
         run: |

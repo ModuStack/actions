@@ -47,5 +47,5 @@ jobs:
       - uses: ./release-to-stg-please
         id: release
         with:
-          release-token: ${{ secrets.RA_GH_RELEASE_TOKEN }}
+          release-token: ${{ secrets.GH_RELEASE_TOKEN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
