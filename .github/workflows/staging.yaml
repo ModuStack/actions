@@ -27,6 +27,7 @@ jobs:
     secrets: inherit
     permissions:
       id-token: write
+      contents: read
 
   devops-stub-svc:
     uses: ./.github/workflows/devops-stub-svc.yaml
