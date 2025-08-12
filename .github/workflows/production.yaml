@@ -34,30 +34,6 @@ jobs:
             ).data[0].number;
           result-encoding: string
 
-  build-release-list:
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(vars.DEFAULT_JOB_TIMEOUT_MINUTES) }}
-    needs:
-      - src-pr
-    outputs:
-      services: ${{ steps.build-release-list.outputs.services }}
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: ./build-release-list
-        id: build-release-list
-        with:
-          release-candidate-tag: release-pr-${{ needs.src-pr.outputs.number }}
-          platform: actions
-          services: |
-            [
-              "devops-stub-svc"
-            ]
-
-
   release-please:
     runs-on: ubuntu-latest
     needs:
