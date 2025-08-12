@@ -1,0 +1,51 @@
+name: Test Python
+
+on:
+  workflow_call:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+jobs:
+  test-python:
+    if: "${{ !contains(github.event.pull_request.title, 'chore(main): release') }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(vars.DEFAULT_JOB_TIMEOUT_MINUTES) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install virtualenv
+        run: |
+          python -m pip install --upgrade pip
+          pip install virtualenv
+          virtualenv release-multiple-to-stg-please/.venv
+          source release-multiple-to-stg-please/.venv/bin/activate
+          pip install -r release-multiple-to-stg-please/requirements.txt
+
+
+      - name: Run release-multiple-to-stg-please tests
+        shell: bash
+        run: |
+          source release-multiple-to-stg-please/.venv/bin/activate
+          task test:python:release-multiple-to-stg-please
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

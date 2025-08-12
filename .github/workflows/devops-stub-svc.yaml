@@ -1,0 +1,38 @@
+name: DevOps Stub SVC CI/CD
+
+on:
+  workflow_call:
+    inputs:
+      skip:
+        description: Don't run the specified jobs
+        default: ''
+        required: false
+        type: string
+    outputs:
+      changed:
+        value: ${{ jobs.changed-files.outputs.app }}
+      version:
+        value: ${{ jobs.build.outputs.version }}
+
+jobs:
+  changed-files:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(vars.DEFAULT_JOB_TIMEOUT_MINUTES) }}
+    outputs:
+      app: ${{ !env.ACT && steps.filter.outputs.app || 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: ./changed-files
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            app:
+              - 'package.json'
+              - 'Dockerfile'
+              - '**/*.yml'
+              - '**/*.yaml'
+              - '**/*.sh'
+              - '.github/workflows/devops-stub-svc.yaml'
+
+
